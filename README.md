@@ -73,4 +73,4 @@ Potential enhancements to the simulation include:
 
 ## References
 
-- This project was developed with the assistance of MathWorks tutorials and resources.
+- This project was developed with the assistance of MathWorks resources.
