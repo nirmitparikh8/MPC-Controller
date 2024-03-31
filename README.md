@@ -75,8 +75,4 @@ Potential enhancements to the simulation include:
 
 ## References
 
-- [Model Predictive Control Toolbox Documentation](https://www.mathworks.com/products/mpc.html)
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+- This project was developed with the assistance of MathWorks tutorials and resources.
