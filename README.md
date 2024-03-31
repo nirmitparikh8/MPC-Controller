@@ -61,7 +61,11 @@ To run the simulation:
 Upon running the simulation, you will observe:
 
 - Plot of the ego vehicle's trajectory and obstacle avoidance behavior.
+  ![](vehicle_trajectory.png)
 - Visualization of the simulation in the Simulink model, showing the ego vehicle's motion and interaction with obstacles.
+  ![](position_data.png)
+  ![](controls.png)
+
 
 ## Future Improvements
 
