@@ -1,0 +1,111 @@
+% Define initial parameters
+V = 20; % Velocity
+x0 = [0; 0; 0; V]; % Initial state: [x, y, theta, velocity]
+u0 = [0; 0]; % Initial control input: [throttle, delta]
+Ts = 0.02; % Time increment
+
+% Generate ego vehicle model
+[Ad, Bd, Cd, Dd, U, Y, X, DX] = discreteModel(Ts, x0, u0);
+dsys = ss(Ad, Bd, Cd, Dd, Ts=Ts); % Create state-space model
+dsys.InputName = {'Throttle', 'Delta'};
+dsys.StateName = {'X', 'Y', 'Theta', 'V'};
+dsys.OutputName = dsys.StateName;
+
+% Define lane and obstacle parameters
+lanes = 3;
+laneWidth = 4;
+
+obstacle = struct;
+obstacle.Length = 5;
+obstacle.Width = 2;
+obstacle.X = 50;
+obstacle.Y = 0;
+obstacle.safeDistanceX = obstacle.Length;
+obstacle.safeDistanceY = laneWidth;
+obstacle = createObstacle(obstacle);
+obstacle.DetectionDistance = 30;
+
+% Plot initial condition
+f = initialPlot(x0, obstacle, laneWidth, lanes);
+
+% Initialize MPC object
+status = mpcverbosity("off");
+mpcobj = mpc(dsys);
+
+% Set MPC properties
+mpcobj.PredictionHorizon = 60; % Prediction horizon
+mpcobj.ControlHorizon = 2; % Control horizon
+mpcobj.ManipulatedVariables(1).RateMin = -0.2 * Ts; % Throttle rate constraints
+mpcobj.ManipulatedVariables(1).RateMax = 0.2 * Ts;
+mpcobj.ManipulatedVariables(2).RateMin = -pi / 30 * Ts; % Steering angle rate constraints
+mpcobj.ManipulatedVariables(2).RateMax = pi / 30 * Ts;
+mpcobj.ManipulatedVariables(1).ScaleFactor = 2; % Throttle scale factor
+mpcobj.ManipulatedVariables(2).ScaleFactor = 0.2; % Steering angle scale factor
+mpcobj.Weights.OutputVariables = [0 30 0 1]; % Output variable weights
+mpcobj.Model.Nominal = struct(U=U, Y=Y, X=X, DX=DX); % Nominal conditions
+
+% Set up mixed I/O constraints for obstacle avoidance
+E1 = [0 0]; F1 = [0 1 0 0]; G1 = laneWidth * lanes / 2;
+E2 = [0 0]; F2 = [0 -1 0 0]; G2 = laneWidth * lanes / 2;
+E3 = [0 0]; F3 = [0 -1 0 0]; G3 = laneWidth * lanes / 2;
+setconstraint(mpcobj, [E1; E2; E3], [F1; F2; F3], [G1; G2; G3], [1; 1; 0.1]);
+
+% Define reference signal
+refSignal = [0 0 0 V];
+
+% Initialize states and arrays for simulation
+x = x0;
+u = u0;
+egoStates = mpcstate(mpcobj);
+T = 0:Ts:4;
+saveSlope = zeros(length(T), 1);
+saveIntercept = zeros(length(T), 1);
+ympc = zeros(length(T), size(Cd, 1));
+umpc = zeros(length(T), size(Bd, 2));
+
+% Main simulation loop
+for k = 1:length(T)
+    % Obtain new plant model and output measurements for interval |k|.
+    [Ad, Bd, Cd, Dd, U, Y, X, DX] = discreteModel(Ts, x, u);
+    measurements = Cd * x + Dd * u;
+    ympc(k, :) = measurements';
+
+    % Determine obstacle detection and update mixed I/O constraints
+    detection = detectObstacles(x, obstacle, laneWidth);
+    [E, F, G, saveSlope(k), saveIntercept(k)] = ...
+        computeObstacleConstraints(x, detection, obstacle, laneWidth, lanes);
+
+    % Prepare new plant model and nominal conditions for adaptive MPC
+    newPlant = ss(Ad, Bd, Cd, Dd, Ts=Ts);
+    newNominal = struct(U=U, Y=Y, X=X, DX=DX);
+
+    % Prepare new mixed I/O constraints
+    options = mpcmoveopt;
+    options.CustomConstraint = struct(E=E, F=F, G=G);
+
+    % Compute optimal moves using updated plant, nominal conditions, and constraints
+    [u, Info] = mpcmoveAdaptive(mpcobj, egoStates, newPlant, newNominal, ...
+        measurements, refSignal, [], options);
+    umpc(k, :) = u';
+
+    % Update the plant state for the next iteration |k+1|.
+    x = Ad * x + Bd * u;
+end
+
+% Reset MPC verbosity
+mpcverbosity(status);
+
+% Plot mixed I/O constraints and MPC trajectory
+figure(f)
+for k = 1:length(saveSlope)
+    X = [0; 50; 100];
+    Y = saveSlope(k) * X + saveIntercept(k);
+    line(X, Y, LineStyle="--", Color="g")
+end
+plot(ympc(:, 1), ympc(:, 2), "-k");
+axis([0 ympc(end, 1) -laneWidth * lanes / 2 laneWidth * lanes / 2]) % Reset axis
+
+% Open and simulate the Simulink model
+mdl = "mpcController";
+open_system(mdl)
+sim(mdl)
