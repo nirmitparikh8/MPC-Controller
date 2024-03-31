@@ -1,7 +1,5 @@
 # MPC Controller To Avoid Obstacles
 
-This repository contains MATLAB code for simulating an adaptive Model Predictive Control (MPC) based obstacle avoidance system for an ego vehicle. The simulation is performed in a discrete-time setting and incorporates mixed Input/Output (I/O) constraints to ensure safe navigation in the presence of obstacles.
-
 ## Introduction
 
 Model Predictive Control (MPC) is a powerful control technique widely used in various applications, including autonomous vehicles, robotics, and process control. In this project, we utilize MPC to design an obstacle avoidance system for an ego vehicle navigating within predefined lanes. The goal is to develop a robust and adaptive control strategy that enables the vehicle to navigate safely in complex environments with dynamic obstacles.
